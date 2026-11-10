@@ -1,0 +1,2 @@
+# Screen_Collector
+给agent的屏幕采集器，让你的ai查看你的电脑屏幕使用情况
