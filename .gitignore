@@ -1,0 +1,14 @@
+# 采集日志与汇总：含逐条应用使用记录，属于个人隐私，不要提交
+state/
+*.jsonl
+usage-today.json
+
+# 计划任务导出（含本机绝对路径）
+*.xml
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+*.swp
