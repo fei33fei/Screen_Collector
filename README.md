@@ -186,6 +186,9 @@ if ($errs.Count -eq 0) { "语法 OK" } else { $errs }
 **Q：采集器跑着，但 `usage-today.json` 不更新？**
 先看 `samples` 是不是 0。为 0 说明一条采样都没进去——通常是机器锁屏或没有前台窗口（`GetForegroundWindow` 返回 0）。解锁后过 20 秒再看。
 
+**Q：电脑一直没关，第二天 `usage-today.json` 会不会把昨天的一起算进去？**
+不会。汇总只统计 `ts` 属于当天的采样；进程跨零点继续跑时，会自动切换到当天的 `usage-YYYY-MM-DD.jsonl` 并把当天的样本重新读回来。早期版本没做这件事，会出现 `screenMin` 变成两天之和、`firstActive` 落在昨天的情况。
+
 **Q：日志里全是 `(unknown)`？**
 拿不到前台窗口进程名，多半是权限或会话隔离问题（服务/计划任务在 session 0 跑）。用「交互式登录」方式注册任务，别用 SYSTEM 账户。
 

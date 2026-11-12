@@ -134,11 +134,33 @@ function Get-Foreground {
 
 function Get-TodayLogPath { Join-Path $StateDir ("usage-{0}.jsonl" -f (Get-Date -Format 'yyyy-MM-dd')) }
 
+# 读「今天」的全部采样：扫同目录所有 usage-*.jsonl，按 ts 的日期过滤。
+# 为什么不能只读当前那个文件：进程跨零点不换文件时，今天的行会留在昨天那个文件里
+# （只读当前文件会以为今天一条数据都没有，汇总也会把两天加在一起）。
+function Read-TodaySamples {
+    $todayStr = (Get-Date -Format 'yyyy-MM-dd')
+    $rows = @()
+    $files = @(Get-ChildItem -Path $StateDir -Filter 'usage-*.jsonl' -File -ErrorAction SilentlyContinue)
+    foreach ($f in $files) {
+        foreach ($line in (Get-Content $f.FullName -Encoding UTF8)) {
+            if ($line.Trim() -and $line -like "*$todayStr *") {
+                try { $rows += ($line | ConvertFrom-Json) } catch { }
+            }
+        }
+    }
+    return $rows
+}
+
 # ---------- 汇总 ----------
 function Write-Summary {
     param([object[]]$Samples)
 
     $summaryPath = Join-Path $StateDir 'usage-today.json'
+
+    # 只统计「今天」的样本：进程跨零点仍在跑时，$Samples 里会混着昨天的行，
+    # 不过滤的话 screenMin 会变成两天的和、firstActive 落在昨天。
+    $todayStr = (Get-Date -Format 'yyyy-MM-dd')
+    $Samples = @($Samples | Where-Object { $_.ts -like "$todayStr*" })
 
     if (-not $Samples -or $Samples.Count -eq 0) {
         $empty = [ordered]@{
@@ -297,15 +319,23 @@ function Write-Summary {
 Write-Output "[采集器] 启动，采样间隔 ${IntervalSec}s，离开阈值 ${IdleAwaySec}s，标题记录 $(if ($TrackTitle) {'开'} else {'关'})，状态目录 $StateDir"
 
 $logPath = Get-TodayLogPath
-$existing = @()
-if (Test-Path $logPath) {
-    foreach ($line in (Get-Content $logPath -Encoding UTF8)) {
-        if ($line.Trim()) { try { $existing += ($line | ConvertFrom-Json) } catch { } }
-    }
-}
+$logDate = (Get-Date -Format 'yyyy-MM-dd')
+$existing = @(Read-TodaySamples)
 $all = [System.Collections.ArrayList]@($existing)
 
 while ($true) {
+    # 跨零点：换当天的日志文件，并把当天的样本重新读回来。
+    # 不换的话日志文件会一直追加下去（文件名停在启动那天），usage-YYYY-MM-DD.jsonl
+    # 也就对不上日期。
+    $nowDate = (Get-Date -Format 'yyyy-MM-dd')
+    if ($nowDate -ne $logDate) {
+        $logDate = $nowDate
+        $logPath = Get-TodayLogPath
+        $existing = @(Read-TodaySamples)
+        $all = [System.Collections.ArrayList]@($existing)
+        Write-Output "[采集器] 日期切换 -> $logDate，日志 $logPath"
+    }
+
     try {
         $s = Get-Foreground
         if ($s) {
